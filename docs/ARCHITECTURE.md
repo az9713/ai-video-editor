@@ -106,7 +106,7 @@ App (page.tsx)
 |-----------|---------------|
 | Editor | Orchestrates all child components, manages state |
 | VideoUploader | Handles file drag/drop and upload |
-| VideoPlayer | Video playback, seeking, expose control methods |
+| VideoPlayer | Video playback with clip-aware seeking (skips deleted sections during playback) |
 | Timeline | Visual clip representation, click-to-seek, zoom |
 | TimelineClip | Individual clip display and selection |
 | Playhead | Current time indicator, draggable |
@@ -374,8 +374,8 @@ ffmpeg -i input.mp4 -ac 1 -ar 8000 -f f32le -acodec pcm_f32le pipe:1
 # Extract audio for transcription
 ffmpeg -i input.mp4 -vn -ar 16000 -ac 1 output.mp3
 
-# Cut a clip (stream copy, no re-encoding)
-ffmpeg -ss {start} -i input.mp4 -t {duration} -c copy output.mp4
+# Cut a clip (with re-encoding for frame-accurate cuts)
+ffmpeg -i input.mp4 -ss {start} -t {duration} -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -y output.mp4
 
 # Concatenate clips
 ffmpeg -f concat -safe 0 -i list.txt -c copy output.mp4
@@ -478,7 +478,7 @@ interface AIEditResult {
 
 ### Server-Side
 
-1. **FFMPEG**: Stream copy (`-c copy`) avoids re-encoding
+1. **FFMPEG**: Re-encodes clips for frame-accurate cuts (slower but precise)
 2. **Temp file cleanup**: Files deleted after export
 3. **Waveform sampling**: Downsampled to 1000 peaks
 

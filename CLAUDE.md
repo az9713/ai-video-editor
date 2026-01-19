@@ -143,8 +143,9 @@ GEMINI_API_KEY=your_key_here  # Required for AI editing
 4. Press C to cut at playhead
 5. Click clip to select, press Delete to remove
 6. Verify clips snap together after deletion
-7. Test AI Edit: Transcribe → Enter prompt → Generate clips
-8. Export and verify output plays correctly
+7. **Verify playback skips deleted sections** (clip-aware playback)
+8. Test AI Edit: Transcribe → Enter prompt → Generate clips
+9. Export and verify output plays correctly (only selected clips, correct duration)
 
 ## Known Limitations
 
@@ -213,3 +214,16 @@ Key changes:
 **Trade-off:** Export is slower (re-encoding vs stream copy) but produces correct output.
 
 **File changed:** `src/lib/ffmpeg.ts` - `cutClip()` function
+
+### Clip-Aware Playback (Added 2025-01-19)
+
+**Feature:** Video playback now respects clip boundaries. When playing, the video automatically:
+- Skips over deleted sections (gaps between clips)
+- Jumps from the end of one clip to the start of the next
+- Stops at the end of the last clip
+
+**Implementation:** `VideoPlayer.tsx` now accepts a `clips` prop and enforces boundaries in `handleTimeUpdate()`.
+
+**Files changed:**
+- `src/components/VideoPlayer.tsx` - Added clips prop and boundary enforcement
+- `src/components/Editor.tsx` - Passes clips to VideoPlayer, updated seek handling

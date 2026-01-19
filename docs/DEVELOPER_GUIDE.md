@@ -405,6 +405,7 @@ function Greeting({ name }: { name: string }) {
    - Wraps the HTML5 `<video>` element
    - Provides custom controls (play, pause, volume)
    - Exposes methods like `seekTo(time)` to other components
+   - **Clip-aware playback**: Automatically skips deleted sections during playback
 
 3. **Timeline.tsx** - Shows the clips
    - Displays a visual representation of the video

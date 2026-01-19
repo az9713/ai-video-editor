@@ -459,9 +459,11 @@ const response = await fetch('/api/export', {
 
 ### Notes
 
-- Clips are cut using stream copy (no re-encoding)
+- Clips are re-encoded (libx264/aac) for frame-accurate cuts
+- Export is slower than stream copy but produces precise results
 - Temporary clip files are cleaned up after export
 - Download the file using the `downloadUrl`
+- Exported files are saved to both `exports/` folder and browser Downloads
 
 ---
 
