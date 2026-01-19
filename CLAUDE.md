@@ -1,0 +1,185 @@
+# CLAUDE.md - AI Video Editor Project Guide
+
+## Project Overview
+
+This is an AI-powered video editor built with Next.js that enables:
+- Manual video cutting and clip management
+- AI-based semantic editing using Gemini
+- Audio transcription using Whisper
+- Video export with FFMPEG
+
+## Quick Commands
+
+```bash
+# Start development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Run production build
+npm start
+
+# Type check
+npx tsc --noEmit
+
+# Lint
+npm run lint
+```
+
+## Project Structure
+
+```
+ai-video-editor/
+├── src/
+│   ├── app/                    # Next.js App Router
+│   │   ├── page.tsx            # Main page (renders Editor)
+│   │   ├── layout.tsx          # Root layout
+│   │   ├── globals.css         # Global styles
+│   │   └── api/                # API Routes (server-side)
+│   │       ├── upload/         # POST: Upload video, extract metadata
+│   │       ├── waveform/       # POST: Generate audio waveform peaks
+│   │       ├── extract-audio/  # POST: Extract MP3 from video
+│   │       ├── transcribe/     # POST: Run Whisper transcription
+│   │       ├── ai-edit/        # POST: Gemini AI clip selection
+│   │       ├── export/         # POST: Cut and merge clips
+│   │       └── video/[...path]/ # GET: Serve video files
+│   ├── components/             # React components
+│   │   ├── Editor.tsx          # Main editor container
+│   │   ├── VideoUploader.tsx   # Drag-and-drop upload
+│   │   ├── VideoPlayer.tsx     # HTML5 video with controls
+│   │   ├── Timeline.tsx        # Timeline with clips/waveform
+│   │   ├── TimelineClip.tsx    # Individual clip block
+│   │   ├── Playhead.tsx        # Draggable time indicator
+│   │   ├── AIEditPanel.tsx     # Transcription + AI UI
+│   │   └── ExportButton.tsx    # Export functionality
+│   ├── hooks/                  # Custom React hooks
+│   │   ├── useVideoEditor.ts   # Central state management
+│   │   ├── useKeyboardShortcuts.ts
+│   │   └── useWaveform.ts
+│   ├── lib/                    # Utility libraries
+│   │   ├── ffmpeg.ts           # FFMPEG subprocess calls
+│   │   ├── whisper.ts          # Whisper subprocess
+│   │   ├── gemini.ts           # Gemini API client
+│   │   └── utils.ts            # Helper functions
+│   └── types/                  # TypeScript type definitions
+│       ├── clip.ts             # Clip, VideoMetadata
+│       └── transcript.ts       # Transcript, AIEditResult
+├── uploads/                    # Uploaded videos (gitignored)
+├── temp/                       # Temporary processing files
+├── exports/                    # Exported videos
+└── .env.local                  # Environment variables
+```
+
+## Key Concepts
+
+### Clip Model
+```typescript
+interface Clip {
+  id: string;           // Unique identifier
+  sourceStart: number;  // Start time in source video (seconds)
+  sourceEnd: number;    // End time in source video (seconds)
+  timelineStart: number; // Position on timeline (seconds)
+  duration: number;     // Clip duration (seconds)
+}
+```
+
+### Data Flow
+1. User uploads video → saved to `uploads/`, metadata extracted via ffprobe
+2. Waveform generated → FFMPEG extracts audio peaks
+3. Clips managed in React state → cut/delete/reorder
+4. AI editing: Extract audio → Whisper transcribe → Gemini select clips
+5. Export: FFMPEG cuts each clip → concatenates into final video
+
+## Environment Variables
+
+```env
+GEMINI_API_KEY=your_key_here  # Required for AI editing
+```
+
+## External Dependencies
+
+- **FFMPEG**: Must be installed system-wide for video processing
+- **Whisper**: `pip install openai-whisper` for transcription
+- **Python 3.8+**: Required for Whisper
+
+## Coding Conventions
+
+- Use TypeScript strict mode
+- Components use 'use client' directive for client-side rendering
+- API routes use Next.js App Router conventions
+- Tailwind CSS for styling
+- State managed via custom hooks, not external state libraries
+
+## Common Tasks
+
+### Adding a New API Route
+1. Create folder in `src/app/api/[route-name]/`
+2. Create `route.ts` with exported HTTP method handlers
+3. Use `NextRequest`/`NextResponse` from `next/server`
+
+### Adding a New Component
+1. Create file in `src/components/`
+2. Add 'use client' if it uses hooks/interactivity
+3. Export as default
+4. Import and use in parent component
+
+### Modifying Video Processing
+- Edit `src/lib/ffmpeg.ts` for FFMPEG operations
+- All FFMPEG calls use `spawn` from `child_process`
+- Handle both stdout and stderr for debugging
+
+## Testing Checklist
+
+1. Upload a video file (MP4, MOV, WebM)
+2. Verify video plays in the player
+3. Check waveform appears on timeline
+4. Press C to cut at playhead
+5. Click clip to select, press Delete to remove
+6. Verify clips snap together after deletion
+7. Test AI Edit: Transcribe → Enter prompt → Generate clips
+8. Export and verify output plays correctly
+
+## Known Limitations
+
+- Large files (>500MB) may cause issues
+- Whisper transcription is slow for long videos
+- No undo/redo functionality (reset only)
+- Single video track (no multi-track editing)
+
+## Debugging Tips
+
+- Check browser console for client-side errors
+- Check terminal for server-side errors
+- FFMPEG errors appear in API route console.error
+- Whisper progress logged to stdout during transcription
+
+## Resolved Issues
+
+### FFMPEG Export Not Cutting Video (Fixed 2025-01-19)
+
+**Symptom:** AI selected a clip (e.g., 0:03-0:06) but the exported video was still the full original duration (7s instead of 3s). The exported file size matched the original video.
+
+**Root Cause:** The original `cutClip` function in `src/lib/ffmpeg.ts` used:
+```bash
+ffmpeg -ss [start] -i input.mp4 -t [duration] -c copy -y output.mp4
+```
+
+Two issues with this approach:
+1. **`-ss` before `-i`**: FFMPEG seeks to the nearest keyframe, not the exact time
+2. **`-c copy`**: Stream copy mode can only cut at keyframes (typically every 2-10 seconds in most videos)
+
+Combined, these caused FFMPEG to include content from the nearest keyframe before the requested start time, often resulting in the full video being copied.
+
+**Fix:** Changed to re-encoding with accurate seeking:
+```bash
+ffmpeg -i input.mp4 -ss [start] -t [duration] -c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -y output.mp4
+```
+
+Key changes:
+1. **`-ss` after `-i`**: Decodes from the beginning and seeks to exact frame position
+2. **Re-encode with libx264/aac**: Allows frame-accurate cuts at any timestamp
+
+**Trade-off:** Export is slower (re-encoding vs stream copy) but produces correct output.
+
+**File changed:** `src/lib/ffmpeg.ts` - `cutClip()` function
