@@ -1,8 +1,9 @@
 'use client';
 
-import { useRef, useEffect, useImperativeHandle, forwardRef, useState, useCallback } from 'react';
+import { useRef, useImperativeHandle, forwardRef, useState, useCallback } from 'react';
 import { Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
 import { formatTime } from '@/lib/utils';
+import { Clip } from '@/types/clip';
 
 export interface VideoPlayerRef {
   seekTo: (time: number) => void;
@@ -16,19 +17,45 @@ export interface VideoPlayerRef {
 
 interface VideoPlayerProps {
   src: string;
-  onTimeUpdate?: (currentTime: number) => void;
+  clips?: Clip[];
+  onTimeUpdate?: (timelineTime: number) => void;
   onDurationChange?: (duration: number) => void;
   onPlayStateChange?: (isPlaying: boolean) => void;
 }
 
 const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
-  ({ src, onTimeUpdate, onDurationChange, onPlayStateChange }, ref) => {
+  ({ src, clips = [], onTimeUpdate, onDurationChange, onPlayStateChange }, ref) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
     const [volume, setVolume] = useState(1);
+    const currentClipIndexRef = useRef<number>(0);
+
+    // Convert source video time to timeline time
+    const sourceToTimelineTime = useCallback((sourceTime: number): number => {
+      if (clips.length === 0) return sourceTime;
+
+      for (const clip of clips) {
+        if (sourceTime >= clip.sourceStart && sourceTime < clip.sourceEnd) {
+          return clip.timelineStart + (sourceTime - clip.sourceStart);
+        }
+      }
+      // If not in any clip, find the nearest clip end
+      const lastClip = clips[clips.length - 1];
+      return lastClip ? lastClip.timelineStart + lastClip.duration : sourceTime;
+    }, [clips]);
+
+    // Find which clip contains a given source time
+    const findClipAtSourceTime = useCallback((sourceTime: number): number => {
+      for (let i = 0; i < clips.length; i++) {
+        if (sourceTime >= clips[i].sourceStart && sourceTime < clips[i].sourceEnd) {
+          return i;
+        }
+      }
+      return -1;
+    }, [clips]);
 
     useImperativeHandle(ref, () => ({
       seekTo: (time: number) => {
@@ -57,12 +84,62 @@ const VideoPlayer = forwardRef<VideoPlayerRef, VideoPlayerProps>(
     }));
 
     const handleTimeUpdate = useCallback(() => {
-      if (videoRef.current) {
-        const time = videoRef.current.currentTime;
-        setCurrentTime(time);
-        onTimeUpdate?.(time);
+      if (!videoRef.current) return;
+
+      const sourceTime = videoRef.current.currentTime;
+      const playing = !videoRef.current.paused;
+
+      if (clips.length === 0) {
+        // No clips - just play normally
+        setCurrentTime(sourceTime);
+        onTimeUpdate?.(sourceTime);
+        return;
       }
-    }, [onTimeUpdate]);
+
+      // Find current clip
+      const clipIndex = findClipAtSourceTime(sourceTime);
+
+      if (playing) {
+        if (clipIndex === -1) {
+          // Not in any clip - find next clip to jump to
+          const nextClip = clips.find(c => c.sourceStart > sourceTime);
+          if (nextClip) {
+            // Jump to next clip
+            videoRef.current.currentTime = nextClip.sourceStart;
+            currentClipIndexRef.current = clips.indexOf(nextClip);
+          } else {
+            // No more clips - stop playback
+            videoRef.current.pause();
+            // Seek to end of last clip
+            const lastClip = clips[clips.length - 1];
+            videoRef.current.currentTime = lastClip.sourceEnd - 0.01;
+          }
+          return;
+        }
+
+        const currentClip = clips[clipIndex];
+        currentClipIndexRef.current = clipIndex;
+
+        // Check if we've reached end of current clip
+        if (sourceTime >= currentClip.sourceEnd - 0.05) {
+          // Move to next clip or stop
+          if (clipIndex < clips.length - 1) {
+            const nextClip = clips[clipIndex + 1];
+            videoRef.current.currentTime = nextClip.sourceStart;
+            currentClipIndexRef.current = clipIndex + 1;
+          } else {
+            // End of all clips - stop playback
+            videoRef.current.pause();
+          }
+          return;
+        }
+      }
+
+      // Report timeline time (not source time)
+      const timelineTime = sourceToTimelineTime(sourceTime);
+      setCurrentTime(sourceTime);
+      onTimeUpdate?.(timelineTime);
+    }, [clips, onTimeUpdate, findClipAtSourceTime, sourceToTimelineTime]);
 
     const handleDurationChange = useCallback(() => {
       if (videoRef.current) {

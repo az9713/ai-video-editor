@@ -498,9 +498,24 @@ When you're happy with your edits, export the final video.
 
 ### Finding Your Exported File
 
-- Check your browser's Downloads folder
+- Check your browser's **Downloads** folder
 - The file is named `exported_video_[timestamp].mp4`
 - You can rename it after downloading
+
+### File Storage Locations
+
+Exported videos are saved to **two locations**:
+
+| Location | Description |
+|----------|-------------|
+| `Downloads/` | Your browser downloads the file here (your copy) |
+| `exports/` | Server-side folder in the project directory |
+
+**Important:** The `exports/` folder accumulates files and is not automatically cleaned up. To free disk space, you can delete old files from this folder.
+
+Other folders that may accumulate files:
+- `uploads/` - Source videos you uploaded
+- `temp/` - Temporary audio files from transcription
 
 ### Tips for Best Results
 
@@ -832,7 +847,11 @@ A: FFMPEG needs to:
 This is computationally intensive, especially for long videos.
 
 **Q: Where are my exported videos saved?**
-A: They're saved in the `exports/` folder in the project directory, then your browser downloads them.
+A: Exported videos are saved to **two locations**:
+1. `exports/` folder in the project directory (server-side)
+2. Your browser's Downloads folder (your copy)
+
+The `exports/` folder is not automatically cleaned up and may accumulate files over time. You can safely delete old files from this folder to free disk space.
 
 ---
 

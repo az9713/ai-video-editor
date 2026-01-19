@@ -46,11 +46,25 @@ export default function Editor() {
     fetchWaveform(metadata.id, filename);
   }, [setVideo, fetchWaveform]);
 
-  // Handle seek from timeline
-  const handleSeek = useCallback((time: number) => {
-    setPlayheadTime(time);
-    videoPlayerRef.current?.seekTo(time);
-  }, [setPlayheadTime]);
+  // Handle seek from timeline (time is timeline time, need to convert to source time)
+  const handleSeek = useCallback((timelineTime: number) => {
+    setPlayheadTime(timelineTime);
+
+    // Convert timeline time to source time
+    if (clips.length > 0) {
+      const clip = clips.find(
+        c => timelineTime >= c.timelineStart && timelineTime < c.timelineStart + c.duration
+      );
+      if (clip) {
+        const offsetInClip = timelineTime - clip.timelineStart;
+        const sourceTime = clip.sourceStart + offsetInClip;
+        videoPlayerRef.current?.seekTo(sourceTime);
+        return;
+      }
+    }
+    // Fallback: seek directly (for when no clips or outside clip range)
+    videoPlayerRef.current?.seekTo(timelineTime);
+  }, [setPlayheadTime, clips]);
 
   // Handle time update from video player
   const handleTimeUpdate = useCallback((time: number) => {
@@ -139,6 +153,7 @@ export default function Editor() {
               <VideoPlayer
                 ref={videoPlayerRef}
                 src={video.filepath}
+                clips={clips}
                 onTimeUpdate={handleTimeUpdate}
                 onPlayStateChange={handlePlayStateChange}
               />
